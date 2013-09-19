@@ -132,15 +132,18 @@ module Cucumber::Formatter
                 | foo |
                 | bar |
 
-            Examples: Good
-              | Things   |
-              | Cucumber |
-              | Whisky   |
-            Examples: Evil
-              | Things   |
-              | Big Mac  |
+              Examples: Good
+                | Things   |
+                | Cucumber |
+                | Whisky   |
+              Examples: Evil
+                | Things   |
+                | Big Mac  |
         FEATURE
 
+        it { @doc.xpath('//testcase').length.should == 3 }
+        it { @doc.xpath('//testcase/@name').first.value.
+          should eq "Eat things (outline example : | Cucumber |)" }
         it { @doc.to_s.should =~ /Eat things when hungry/ }
         it { @doc.to_s.should =~ /Cucumber/ }
         it { @doc.to_s.should =~ /Whisky/ }
