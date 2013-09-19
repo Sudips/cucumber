@@ -141,7 +141,7 @@ module Cucumber
         end
 
         after do
-          formatter.after_feature(nil)
+          formatter.after_feature(feature)
         end
 
         private
@@ -225,14 +225,17 @@ module Cucumber
       StepsPrinter = Printer.new(:formatter) do
         before do
           formatter.before_steps(nil)
+          @steps = []
         end
 
         def step(step, step_result, runtime, indent, background = nil)
           StepPrinter.new(formatter, runtime, indent, step, step_result, background).print
+          @steps << LegacyStep.new(step_result)
         end
 
         after do
-          formatter.after_steps(nil)
+          require 'cucumber/ast/step_collection'
+          formatter.after_steps(Ast::StepCollection.new(@steps))
         end
       end
 
@@ -270,6 +273,12 @@ module Cucumber
         end
 
         LegacyStep = Struct.new(:step_result) do
+          attr_accessor :step_collection
+
+          def exception
+            step_result.exception
+          end
+
           def status
             step_result.status
           end
@@ -280,6 +289,10 @@ module Cucumber
 
           def multiline_arg
 
+          end
+
+          def name
+            step_result.step_name
           end
 
           def actual_keyword
