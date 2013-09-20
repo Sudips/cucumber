@@ -32,7 +32,8 @@ module Cucumber
       end
 
       def before_feature_element(feature_element)
-        @in_examples = Ast::ScenarioOutline === feature_element
+        @in_examples = Ast::ScenarioOutline === feature_element ||
+          Core::Ast::ScenarioOutline === feature_element
         @steps_start = Time.now
       end
 
@@ -110,7 +111,10 @@ module Cucumber
       end
 
       def after_table_row(table_row)
-        return unless @in_examples and Cucumber::Ast::OutlineTable::ExampleRow === table_row
+        # TODO: remove coupling to type
+        return unless @in_examples and (
+          Cucumber::Ast::OutlineTable::ExampleRow === table_row ||
+          Cucumber::Formatter::ExamplesTableRowPrinter::LegacyTableRow === table_row)
         duration = Time.now - @table_start
         unless @header_row
           name_suffix = " (outline example : #{table_row.name})"

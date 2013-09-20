@@ -49,7 +49,6 @@ module Cucumber
         yield scenario if block_given?
       end
 
-
       # Provides a DSL for making the printers themselves more terse
       class Printer < Struct
         def self.before(&block)
@@ -292,7 +291,7 @@ module Cucumber
           end
 
           def name
-            step_result.step_name
+            step_result.step_name || raise("#{step_result.inspect} has no step_name!")
           end
 
           def actual_keyword
@@ -326,7 +325,7 @@ module Cucumber
 
         def table(table)
           table.cells_rows.each do |row|
-            TableRowPrinter.new(formatter, runtime, DataTableRow.new(row.map(&:value), row.line)).before.after
+            DataTableRowPrinter.new(formatter, runtime, DataTableRow.new(row.map(&:value), row.line)).before.after
           end
         end
 
@@ -442,11 +441,11 @@ module Cucumber
           formatter.before_examples(node)
           formatter.examples_name(node.keyword, node.name)
           formatter.before_outline_table(legacy_table)
-          TableRowPrinter.new(formatter, runtime, TableRow.new(node.header)).before.after
+          ExamplesTableRowPrinter.new(formatter, runtime, TableRow.new(node.header)).before.after
         end
 
         def examples_table_row(examples_table_row, *)
-          delegate_to TableRowPrinter, TableRow.new(examples_table_row)
+          delegate_to ExamplesTableRowPrinter, TableRow.new(examples_table_row)
         end
 
         class TableRow < SimpleDelegator
@@ -493,7 +492,7 @@ module Cucumber
         end
       end
 
-      TableRowPrinter = Printer.new(:formatter, :runtime, :node, :background) do
+      class DataTableRowPrinter < Printer.new(:formatter, :runtime, :node)
         before do
           formatter.before_table_row(node)
         end
@@ -506,10 +505,12 @@ module Cucumber
         end
 
         after do
+          cells = []
           node.values.each do |value|
             formatter.before_table_cell(value)
             formatter.table_cell_value(value, @status || :skipped)
             formatter.after_table_cell(value)
+            cells << value
           end
           formatter.after_table_row(legacy_table_row)
           if @failed_step_result
@@ -530,6 +531,60 @@ module Cucumber
         end
 
         LegacyTableRow = Struct.new(:exception, :status)
+
+        def exception
+          return nil unless @failed_step_result
+          @failed_step_result.exception
+        end
+      end
+
+      class ExamplesTableRowPrinter < Printer.new(:formatter, :runtime, :node)
+        before do
+          formatter.before_table_row(node)
+        end
+
+        def step(step, result)
+          step_result = LegacyResultBuilder.new(result).step_result(step_match(step))
+          runtime.step_visited step_result
+          @failed_step_result = step_result if result.failed?
+          @status = step_result.status unless @status == :failed
+        end
+
+        after do
+          cells = []
+          node.values.each do |value|
+            formatter.before_table_cell(value)
+            formatter.table_cell_value(value, @status || :skipped)
+            formatter.after_table_cell(value)
+            cells << value
+          end
+          formatter.after_table_row(legacy_table_row(cells))
+          if @failed_step_result
+            formatter.exception @failed_step_result.exception, @failed_step_result.status
+          end
+        end
+
+        private
+
+        def step_match(step)
+          runtime.step_match(step.name)
+        rescue Cucumber::Undefined
+          NoStepMatch.new(step, step.name)
+        end
+
+        def legacy_table_row(cells)
+          LegacyTableRow.new(exception, @status, cells)
+        end
+
+        LegacyTableRow = Struct.new(:exception, :status, :cells) do
+          def name
+            "| #{cells.join(' | ')} |"
+          end
+
+          def failed?
+            status == :failed
+          end
+        end
 
         def exception
           return nil unless @failed_step_result
